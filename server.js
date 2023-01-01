@@ -22,18 +22,21 @@ const client = new MongoClient(uri);
 async function startServers() {
   database = client.db("PotholesDB");
   potholesCollection = database.collection("potholesdb");
+  detectorsCollection = database.collection("detectorsdb");
   console.log(database.databaseName, "is running ..");
   server.listen(3000, () => console.log("Server is running on localhost:3000"));
+  await monitorPotholesPostion();
+  // await monitorDetectorsPosition();
 }
 startServers().catch(console.dir);
 
 /***** on websocket connection with a client ******/
 io.on("connection", (socket) => {
-  console.log("a user is connected, ", socket);
+  console.log("a user is connected");
   io.emit(
     "message",
     JSON.stringify({
-      messageType: "simpleText",
+      messageType: "simple text",
       message: "Connection established with the server",
     })
   );
@@ -49,16 +52,23 @@ io.on("connection", (socket) => {
 
 /*********   Adding Pothole Data  **********/
 
-app.post("/addPosPothole", function (req, res) {
+app.post("/addPothole", function (req, res) {
   var newPosPothole = req.body;
   if (newPosPothole.latitude != "" || newPosPothole.longitude != "") {
     potholesCollection.insertOne(newPosPothole);
+    res.status(200).send("position added succuessfuly !!");
+  } else {
+    res.status(200).send("position is empty --> not added to the database");
   }
-  res.end();
+});
+
+app.post("/createDetector", function (req, res) {
+  console.log("detector creation", req.body);
+  // detectorsCollection.insertOne();
 });
 
 /********   GPS Data  ************/
-app.post("/gpsPosition", function (req, res) {
+app.post("/addGpsPosition", function (req, res) {
   console.log("GPS Position of the SmartThing", req.body);
 });
 
@@ -77,13 +87,11 @@ app.get("/", async (req, res) => {
 
 /*********   Getting Last Pothole position  **********/
 
-async function monitorListingsUsingEventEmitter(
-  timeInMs = 100000,
-  pipeline = []
-) {
+async function monitorPotholesPostion(timeInMs = 100000, pipeline = []) {
   const changeStream = potholesCollection.watch(pipeline);
   changeStream.on("change", (next) => {
     const posPothole = {
+      _id: next.fullDocument._id,
       latitude: next.fullDocument.latitude,
       longitude: next.fullDocument.longitude,
       image: next.fullDocument.image,
@@ -91,14 +99,35 @@ async function monitorListingsUsingEventEmitter(
     console.log("change stream : ", posPothole);
     console.log("sending the new pothole position");
     const socketMessage = {
-      messageType: "position",
+      messageType: "pothole position",
       message: JSON.stringify(posPothole),
     };
     io.emit("message", `${JSON.stringify(socketMessage)}`);
   });
   // await closeChangeStream(timeInMs, changeStream);
 }
-await monitorListingsUsingEventEmitter();
+
+/***  Getting GPS Postion  ***/
+
+async function monitorDetectorsPosition(timeInMs = 100000, pipeline = []) {
+  const changeStream = detectorsCollection.watch(pipeline);
+  changeStream.on("change", (next) => {
+    const posPothole = {
+      _id: next.fullDocument._id,
+      latitude: next.fullDocument.latitude,
+      longitude: next.fullDocument.longitude,
+      image: next.fullDocument.image,
+    };
+    console.log("change stream : ", posPothole);
+    console.log("sending the new pothole position");
+    const socketMessage = {
+      messageType: "pothole position",
+      message: JSON.stringify(posPothole),
+    };
+    io.emit("message", `${JSON.stringify(socketMessage)}`);
+  });
+  // await closeChangeStream(timeInMs, changeStream);
+}
 
 function closeChangeStream(timeInMs = 60000, changeStream) {
   return new Promise((resolve) => {
