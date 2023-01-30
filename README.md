@@ -3,5 +3,5 @@
 ### It uses :
 
 - Node JS & Express JS
-- Mongo DB
+- Mongo DB Atlas
 - The Socket.io Server to send new potholes positions (on every insert of a new pothole in the databse "change streams mongodb") coming from the SmartThings
